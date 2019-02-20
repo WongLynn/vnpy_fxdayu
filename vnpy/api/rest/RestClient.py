@@ -257,8 +257,8 @@ class RestClient(object):
             httpStatusCode = response.status_code
             if httpStatusCode / 100 == 2:                               # 2xx都算成功，尽管交易所都用200
                 jsonBody = response.json()
-                request.callback(jsonBody, request)
                 request.status = RequestStatus.success
+                request.callback(jsonBody, request)
             else:
                 request.status = RequestStatus.failed
                 

@@ -25,9 +25,9 @@ from vnpy.trader.app.ctaStrategy.ctaBase import EVENT_CTA_LOG
 
 # 加载底层接口
 if is_windows:
-    from vnpy.trader.gateway import (okexfGateway, huobiGateway, binanceGateway, ctpGateway, bitmexGateway, oandaGateway)
+    from vnpy.trader.gateway import (okexfGateway, okexfpGateway, huobiGateway, binanceGateway, ctpGateway, bitmexGateway, oandaGateway)
 else:
-    from vnpy.trader.gateway import (okexfGateway, huobiGateway, binanceGateway, bitmexGateway, oandaGateway)
+    from vnpy.trader.gateway import (okexfGateway, okexfpGateway, huobiGateway, binanceGateway, bitmexGateway, oandaGateway)
     ctpGateway = None
 
 #----------------------------------------------------------------------
@@ -79,6 +79,7 @@ class App(object):
         me = MainEngine(ee)
         self.me = me
         me.addGateway(okexfGateway)
+        me.addGateway(okexfpGateway)
         me.addGateway(huobiGateway)
         me.addGateway(binanceGateway)
         me.addGateway(bitmexGateway)
