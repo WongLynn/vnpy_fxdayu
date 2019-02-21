@@ -1,3 +1,4 @@
+import sys
 import logging
 from enum import Enum
 from copy import copy
@@ -14,14 +15,21 @@ class MpCommand(Enum):
     START = 1
 
 
+def copy_request_without_callback(request):
+    req = copy(request)
+    req.callback = None
+    req.onError = None
+    req.onFailed = None
+    return req
+
 def callback(qout, req_id, data, request):
-    qout.put((req_id, data, request))
+    qout.put((req_id, data, copy_request_without_callback(request)))
 
 def onFailed(qout, req_id, httpStatusCode, request):
-    qout.put((req_id, httpStatusCode, request))
+    qout.put((req_id, httpStatusCode, copy_request_without_callback(request)))
 
 def onError(qout, req_id, exceptionType, exceptionValue, tb, request):
-    qout.put((req_id, exceptionType, exceptionValue, tb, request))
+    qout.put((req_id, exceptionType, exceptionValue, tb, copy_request_without_callback(request)))
 
 
 class PriorityRestClient(RestClient):
@@ -44,12 +52,13 @@ class PriorityRestClient(RestClient):
 
     def start(self, n=3):
         """启动"""
-        self._mp_worker = Process(target=self._run_mp_worker, args=(self._mp_qin, self._mp_qout, self.urlBase, n))
+        self.sessionCount = n
+        super(PriorityRestClient, self).start(n=3)
+        self._mp_worker = Process(target=self._run_mp_worker)
         self._mp_worker.daemon = True 
         self._mp_worker.start()
-        self._mp_receiver = Thread(targe=self._run_mp_receiver)
+        self._mp_receiver = Thread(target=self._run_mp_receiver)
         self._mp_receiver.start()
-        super(PriorityRestClient, self).start(n=3)
 
     #----------------------------------------------------------------------
     def stop(self):
@@ -78,6 +87,9 @@ class PriorityRestClient(RestClient):
                    extra=None,       # type: Any
                    priority=None,
                    ):               # type: (...)->Request ):
+        if priority is None:
+            priority = self.priority
+
         if priority <= 0:
             return super().addRequest(method, path, callback, params=params, 
                 data=data, headers=headers, onFailed=onFailed, onError=onError)
@@ -92,22 +104,29 @@ class PriorityRestClient(RestClient):
             request.onFailed = onFailed
             request.onError = onError
             self._mp_req_id += 1
-            self._queue.put((self._mp_req_id, mr))
+            self._mp_req[self._mp_req_id] = request
+            self._mp_qin.put((self._mp_req_id, mr))
 
-    @staticmethod
-    def _run_mp_worker(self, qin, qout, url, n):
+    def _get_client(self):
         client = RestClient()
-        client.init(url)
-        client.start(n)
+        client.init(self.urlBase)
+        client.start(self.sessionCount)
+        return client
+    
+    def _run_mp_worker(self):
+        client = self._get_client()
+        qin = self._mp_qin
+        qout = self._mp_qout
+
         while True:
             try:
-                req_id, req, *args = self._mp_qin.get(timeout=1)
+                req_id, req, *args = qin.get(timeout=1)
                 if req_id == 0:
                     if MpCommand(req) == MpCommand.STOP:
                         logging.debug("exit restclient multiprocess worker")
                         break
                 else:
-                    self.addRequest(
+                    client.addRequest(
                         req.method,
                         req.path,
                         callback=partial(callback, qout, req_id),
@@ -136,29 +155,30 @@ class PriorityRestClient(RestClient):
                 continue
             try:
                 *_, request = args
-                if request.deliverDatatime:
+                if request.deliverDatetime:
                     req.deliverDatetime = request.deliverDatetime
                     self._queueing_times.append((req.deliverDatetime - req.createDatetime).total_seconds())
                 if request.responseDatetime:
                     req.responseDatetime = request.responseDatetime
                     self._response_times.append((req.responseDatetime - req.deliverDatetime).total_seconds())
                 req.status = request.status
+                newargs = list(args[:-1]) + [req]
                 if req.status == RequestStatus.success:
-                    req.callback(*args)
+                    req.callback(*newargs)
                 elif req.status == RequestStatus.failed:
                     if req.onFailed:
-                        req.onFailed(*args)
+                        req.onFailed(*newargs)
                     else:
-                        self.onFailed(*args)
+                        self.onFailed(*newargs)
                 elif req.status == RequestStatus.error:
                     if req.onError:
-                        req.onError(*args)
+                        req.onError(*newargs)
                     else:
-                        self.onError(*args)
-            except Exception as e:
+                        self.onError(*newargs)
+            except Exception:
                 req.status = RequestStatus.error
                 t, v, tb = sys.exc_info()
                 if req.onError:
-                    req.onError(t, v, tb, request)
+                    req.onError(t, v, tb, req)
                 else:
-                    self.onError(t, v, tb, request)
+                    self.onError(t, v, tb, req)

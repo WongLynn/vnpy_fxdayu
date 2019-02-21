@@ -1,9 +1,20 @@
+import logging
+
 from vnpy.trader.gateway.okexfGateway.okexfGateway import OkexfGateway, OkexfRestApi
 from vnpy.api.rest.priority import PriorityRestClient
 from vnpy.trader.vtConstant import VN_SEPARATOR
 
 class OkexfpRestApi(PriorityRestClient, OkexfRestApi):
-    pass
+    def _get_client(self):
+        client = OkexfRestApi(self.gateway)
+        client.connect(
+            self.apiKey,
+            self.apiSecret,
+            self.passphrase, 
+            self.leverage, 
+            self.sessionCount
+        )
+        return client
 
 
 class OkexfpGateway(OkexfGateway):
@@ -17,13 +28,20 @@ class OkexfpGateway(OkexfGateway):
     def priority(self):
         return self._priority
 
-    def set_priority(self, priority):
+    @priority.setter
+    def priority(self, priority):
+        logging.debug("Gateway[%s]'s priority has been setted to %s.", self.gatewayName, priority)
         self._priority = priority
 
-    def sendOrder(self, orderReq):
-        self.restApi.set_priority(self._priority)
-        super(OkexfpGateway, self).sendOrder(orderReq)
+    def set_priority(self, priority):
+        self.priority = priority
 
+    def sendOrder(self, orderReq):
+        old_priority = self.restApi.priority
+        self.restApi.set_priority(self.priority)
+        ret = super(OkexfpGateway, self).sendOrder(orderReq)
+        self.restApi.set_priority(old_priority)
+        return ret
 
 class PrioritySetter(object):
     def __init__(self, gateways, priorty):
@@ -57,11 +75,11 @@ class PriorityHelper(object):
     def _find_gateways(self):
         gateways = []
         for symbol in self._strategy.symbolList:
-            gatewayname = VN_SEPARATOR.join(symbol.split(VN_SEPARATOR)[:-1])
-        if gatewayname.upper().startswith("OKEXFP_"):
-            gateway = self._ctaEngine.getGateway(gatewayname)
-            if gateway:
-                gateways.append(gateway)
+            gatewayname = symbol.split(VN_SEPARATOR)[-1]
+            if gatewayname.upper().startswith("OKEXFP_"):
+                gateway = self._ctaEngine.getGateway(gatewayname)
+                if gateway:
+                    gateways.append(gateway)
         return gateways 
 
     def with_priority(self, priority):

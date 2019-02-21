@@ -78,8 +78,8 @@ class App(object):
         
         me = MainEngine(ee)
         self.me = me
+        me.addGateway(okexfpGateway) # must in front of okexfGateway
         me.addGateway(okexfGateway)
-        me.addGateway(okexfpGateway)
         me.addGateway(huobiGateway)
         me.addGateway(binanceGateway)
         me.addGateway(bitmexGateway)
