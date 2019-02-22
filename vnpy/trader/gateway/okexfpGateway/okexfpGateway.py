@@ -1,5 +1,6 @@
 import logging
 
+from vnpy.trader.app.ctaStrategy import CtaTemplate as OriginCtaTemplate
 from vnpy.trader.gateway.okexfGateway.okexfGateway import OkexfGateway, OkexfRestApi
 from vnpy.api.rest.priority import PriorityRestClient
 from vnpy.trader.vtConstant import VN_SEPARATOR
@@ -88,3 +89,15 @@ class PriorityHelper(object):
     def set_priority(self, priority):
         for gateway in self.gateways:
             gateway.set_priority(priority)
+
+
+class CtaTemplate(OriginCtaTemplate):
+    def __init__(self, *args, **kwargs):
+        super(CtaTemplate, self).__init__(*args, **kwargs)
+        self._priority_helper = PriorityHelper(self)
+
+    def with_priority(self, priority):
+        return self._priority_helper.with_priority(priority)
+
+    def set_priority(self, priority):
+        self._priority_helper.set_priority(priority)
