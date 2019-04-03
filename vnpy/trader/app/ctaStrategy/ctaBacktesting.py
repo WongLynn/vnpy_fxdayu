@@ -12,7 +12,7 @@ import os
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-import pickle
+import json
 from vnpy.rpc import RpcClient, RpcServer, RemoteException
 
 # 如果安装了seaborn则设置为白色风格
@@ -76,6 +76,7 @@ class BacktestingEngine(object):
         self.cachePath = os.path.join(os.path.expanduser("~"), "vnpy_data")  # 本地数据缓存地址
         self.logActive = False  # 回测日志开关
         self.logPath = os.path.join(os.getcwd(), "Backtest_Log")  # 回测日志自定义路径
+        self.strategy_setting = {}  # 缓存策略配置
 
         self.dataStartDate = None  # 回测数据开始日期，datetime对象
         self.dataEndDate = None  # 回测数据结束日期，datetime对象
@@ -395,7 +396,7 @@ class BacktestingEngine(object):
     def filter_name(self, input_text):
         alpha='abcdefghijklmnopqrstuvwxyz'
         filter_text = "0123456789._-" + alpha + alpha.upper()
-        new_name = filter(lambda ch: ch in filter_text, input_text)
+        new_name = filter(lambda ch: ch in filter_text, str(input_text))
         name = ''.join(list(new_name))
         return name
     # ----------------------------------------------------------------------
@@ -416,14 +417,15 @@ class BacktestingEngine(object):
         self.strategy = strategyClass(self, setting)
         self.strategy.name = self.strategy.className
         self.initPosition(self.strategy)
+        self.strategy_setting = setting
 
         # 初始化日志文件夹
         if self.logActive:
             symbol_name = self.filter_name(setting['symbolList'])
-            Folder_Name = f'{self.strategy.name}_{symbol_name}_{datetime.now().strftime("%y%m%d%H%M")}'
-            path = os.path.join(self.logPath, Folder_Name[:50])
-            if not os.path.isdir(path):
-                os.makedirs(path)
+            Folder_Name = f'{self.strategy.name.replace("Strategy","")}_{symbol_name}_{datetime.now().strftime("%y%m%d%H%M")}'
+            self.logPath = os.path.join(self.logPath, Folder_Name[:50])
+            if not os.path.isdir(self.logPath):
+                os.makedirs(self.logPath)
 
     # ----------------------------------------------------------------------
     def crossLimitOrder(self, data):
@@ -1302,27 +1304,27 @@ class BacktestingEngine(object):
         result = {
             'startDate': startDate.strftime("%Y-%m-%d"),
             'endDate': endDate.strftime("%Y-%m-%d"),
-            'totalDays': totalDays,
-            'profitDays': profitDays,
-            'lossDays': lossDays,
-            'endBalance': endBalance,
-            'maxDrawdown': maxDrawdown,
-            'maxDdPercent': maxDdPercent,
-            'totalNetPnl': totalNetPnl,
-            'dailyNetPnl': dailyNetPnl,
-            'totalCommission': totalCommission,
-            'dailyCommission': dailyCommission,
-            'totalSlippage': totalSlippage,
-            'dailySlippage': dailySlippage,
-            'totalTurnover': totalTurnover,
-            'dailyTurnover': dailyTurnover,
-            'totalTradeCount': totalTradeCount,
-            'dailyTradeCount': dailyTradeCount,
-            'totalReturn': totalReturn,
-            'annualizedReturn': annualizedReturn,
-            'dailyReturn': dailyReturn,
-            'returnStd': returnStd,
-            'sharpeRatio': sharpeRatio
+            'totalDays': int(totalDays),
+            'profitDays': int(profitDays),
+            'lossDays': int(lossDays),
+            'endBalance': float(endBalance),
+            'maxDrawdown': float(maxDrawdown),
+            'maxDdPercent': float(maxDdPercent),
+            'totalNetPnl': float(totalNetPnl),
+            'dailyNetPnl': float(dailyNetPnl),
+            'totalCommission': float(totalCommission),
+            'dailyCommission': float(dailyCommission),
+            'totalSlippage': float(totalSlippage),
+            'dailySlippage': float(dailySlippage),
+            'totalTurnover': float(totalTurnover),
+            'dailyTurnover': float(dailyTurnover),
+            'totalTradeCount': int(totalTradeCount),
+            'dailyTradeCount': float(dailyTradeCount),
+            'totalReturn': float(totalReturn),
+            'annualizedReturn': float(annualizedReturn),
+            'dailyReturn': float(dailyReturn),
+            'returnStd': float(returnStd),
+            'sharpeRatio': float(sharpeRatio)
         }
 
         return df, result
@@ -1396,6 +1398,14 @@ class BacktestingEngine(object):
             filename = os.path.join(self.logPath, u"回测绩效图.png")
             plt.savefig(filename)
             self.output(u'策略回测绩效图已保存')
+            
+            # self.strategy_setting.update(result)
+            print(result)
+            self.strategy_setting.update(result)
+            filename = os.path.join(self.logPath, "BacktestingResult.json")
+            with open(filename,'w') as f:
+                json.dump(self.strategy_setting, f, indent=4)
+            self.output(u'BacktestingResult saved') 
 
         plt.show()
 
